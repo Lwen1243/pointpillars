@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-# http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0 
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,16 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-"""NMS"""
+"""NMS (PyTorch Version)"""
 import numpy as np
-from mindspore import ops
-from mindspore import Tensor
+import torch
 
 
 def apply_nms(all_boxes, all_scores, thres, max_boxes):
-    """Apply NMS to bboxes."""
-    all_boxes = all_boxes.asnumpy()
-    all_scores = all_scores.asnumpy()
+    """Apply NMS to bboxes using NumPy (CPU-based)."""
+    # Convert torch tensor to numpy if needed
+    if isinstance(all_boxes, torch.Tensor):
+        all_boxes = all_boxes.cpu().numpy()
+    if isinstance(all_scores, torch.Tensor):
+        all_scores = all_scores.cpu().numpy()
+        
     y1 = all_boxes[:, 0]
     x1 = all_boxes[:, 1]
     y2 = all_boxes[:, 2]
@@ -60,17 +63,48 @@ def nms(bboxes,
         pre_max_size=None,
         post_max_size=None,
         iou_threshold=0.5):
-    """NMS"""
+    """NMS (Non-Maximum Suppression)
+    
+    Args:
+        bboxes: torch.Tensor or np.ndarray, shape [N, 4]
+        scores: torch.Tensor or np.ndarray, shape [N]
+        pre_max_size: int, maximum number of boxes to consider before NMS
+        post_max_size: int, maximum number of boxes to keep after NMS
+        iou_threshold: float, IoU threshold for suppression
+        
+    Returns:
+        torch.Tensor or None: indices of kept boxes
+    """
+    # Determine device from input if it's a torch tensor
+    device = None
+    if isinstance(scores, torch.Tensor):
+        device = scores.device
+        
     if pre_max_size is not None:
         num_keeped_scores = scores.shape[0]
         pre_max_size = min(num_keeped_scores, pre_max_size)
-        scores, indices = ops.TopK()(scores, pre_max_size)
-        bboxes = bboxes[indices]
+        
+        if isinstance(scores, torch.Tensor):
+            # PyTorch topk returns (values, indices)
+            scores, indices = torch.topk(scores, pre_max_size)
+        else:
+            # NumPy version
+            indices = np.argsort(scores)[::-1][:pre_max_size]
+            scores = scores[indices]
+            
+        if isinstance(bboxes, torch.Tensor):
+            bboxes = bboxes[indices]
+        else:
+            bboxes = bboxes[indices]
 
     keep = apply_nms(bboxes, scores, iou_threshold, post_max_size)
+    
     if keep.shape[0] == 0:
         return None
+        
     if pre_max_size is not None:
-        keep = Tensor(keep)
+        # Map back to original indices
+        keep = torch.tensor(keep, device=device, dtype=torch.long)
         return indices[keep]
-    return Tensor(keep)
+    
+    return torch.tensor(keep, device=device, dtype=torch.long)

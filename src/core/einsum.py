@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-# http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0 
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-"""einsum"""
+"""einsum (PyTorch Version)"""
 from collections import OrderedDict
 
 import numpy as np
-from mindspore import ops
+import torch
+
 
 VALID_LABELS = set(list("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"))
 
@@ -53,7 +54,9 @@ def validate_args(f_inputs, tensors):
     dimensions = OrderedDict()
     for t in range(len(tensors)):
         fmt = f_inputs[t]
-        assert tensors[t].ndim == len(fmt)
+        # 兼容 PyTorch 和 NumPy
+        ndim = len(tensors[t].shape)
+        assert ndim == len(fmt)
 
         for i in range(len(fmt)):
             if fmt[i] in dimensions:
@@ -68,7 +71,8 @@ def transpose(tensor, permutation):
     """transpose"""
     if isinstance(tensor, np.ndarray):
         return np.transpose(tensor, permutation)
-    return tensor.transpose(permutation)
+    # PyTorch tensor: use permute for multi-dimensional transpose
+    return tensor.permute(permutation)
 
 
 def outer_product(f_inputs, dimensions, tensors):
@@ -90,12 +94,12 @@ def outer_product(f_inputs, dimensions, tensors):
         source = dict(zip(labels, range(len(labels))))
         permutation = [source[l] for l in f_output if l in labels]
         labels = [labels[axis] for axis in permutation]
-        tensor = ops.Transpose()(tensor, tuple(permutation))
+        tensor = transpose(tensor, tuple(permutation))
 
         i = 0
         while i < len(dimensions):
             if i == len(labels) or labels[i] != f_output[i]:
-                tensor = ops.ExpandDims()(tensor, i)
+                tensor = tensor.unsqueeze(i)
                 labels.insert(i, f_output[i])
             else:
                 i += 1
@@ -117,10 +121,10 @@ def contract(op, dimensions, f_output):
 
     f_input = list(dimensions.keys())
     axis = 0
-    while op.ndim > len(f_output):
-        assert len(f_input) == op.ndim
+    while len(op.shape) > len(f_output):  # use len(op.shape) instead of op.ndim for compatibility
+        assert len(f_input) == len(op.shape)
         if f_input[axis] not in f_output:
-            op = op.sum(axis)
+            op = op.sum(dim=axis)
             del f_input[axis]
         else:
             axis += 1
@@ -129,7 +133,7 @@ def contract(op, dimensions, f_output):
         return op
     source = dict(zip(f_input, range(len(f_input))))
     permutation = [source[l] for l in f_output]
-    return ops.Transpose()(op, tuple(permutation))
+    return op.permute(permutation)
 
 
 def einsum(f, *tensors):

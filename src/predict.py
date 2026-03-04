@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-# http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0 
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,12 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-"""predict"""
+"""predict (PyTorch Version)"""
 import numpy as np
-from mindspore import Tensor
-from mindspore import dtype as mstype
-from mindspore import numpy as mnp
-from mindspore import ops
+import torch
+import torch.nn.functional as F
 
 from src.core import box_ops
 from src.core import nms
@@ -26,31 +24,32 @@ from src.data import kitti_common as kitti
 
 def get_index_by_mask(mask):
     """get index by mask"""
-    return Tensor(np.where(mask.asnumpy()))[0]
+    return torch.nonzero(mask, as_tuple=False).squeeze(-1)
 
 
 def xor(a, b):
     """xor"""
-    return Tensor(a.asnumpy() ^ b.asnumpy())
+    return a ^ b
 
 
 def _get_top_scores_labels(total_scores, num_class_with_bg, nms_score_threshold):
     """get top scores"""
     if num_class_with_bg == 1:
         top_scores = total_scores.squeeze(-1)
-        top_labels = ops.Zeros()(total_scores.shape[0], mstype.int64)
+        top_labels = torch.zeros(total_scores.shape[0], dtype=torch.int64, device=total_scores.device)
     else:
-        top_labels, top_scores = ops.ArgMaxWithValue(axis=-1)(total_scores)
+        # torch.max returns (values, indices)
+        top_scores, top_labels = torch.max(total_scores, dim=-1)
 
-    top_scores_keep = Tensor([])
+    top_scores_keep = torch.tensor([], dtype=torch.long, device=top_scores.device)
     if nms_score_threshold > 0.0:
-        thresh = Tensor([nms_score_threshold], dtype=total_scores.dtype)
-        top_scores_keep = (top_scores >= thresh)
-        if top_scores_keep.sum() > 0:
-            top_scores_keep = get_index_by_mask(top_scores_keep)
+        thresh = torch.tensor([nms_score_threshold], dtype=total_scores.dtype, device=total_scores.device)
+        top_scores_keep_mask = (top_scores >= thresh)
+        if top_scores_keep_mask.sum() > 0:
+            top_scores_keep = get_index_by_mask(top_scores_keep_mask)
             top_scores = top_scores[top_scores_keep]
         else:
-            top_scores = Tensor([])
+            top_scores = torch.tensor([], dtype=total_scores.dtype, device=total_scores.device)
 
     return top_scores, top_labels, top_scores_keep
 
@@ -103,13 +102,13 @@ def _get_selected_data(total_scores,
 def _get_total_scores(cls_preds, cfg):
     """get total scores"""
     if cfg['encode_background_as_zeros']:
-        total_scores = ops.Sigmoid()(cls_preds)
+        total_scores = torch.sigmoid(cls_preds)
     else:
         # encode background as first element in one-hot vector
         if cfg['use_sigmoid_score']:
-            total_scores = ops.Sigmoid()(cls_preds)[..., 1:]
+            total_scores = torch.sigmoid(cls_preds)[..., 1:]
         else:
-            total_scores = ops.Softmax(axis=-1)(cls_preds)[..., 1:]
+            total_scores = F.softmax(cls_preds, dim=-1)[..., 1:]
 
     return total_scores
 
@@ -159,7 +158,7 @@ def predict(example, preds_dict, cfg, box_coder):
             cls_preds = cls_preds[a_mask]
             if use_direction_classifier:
                 dir_preds = dir_preds[a_mask]
-                dir_labels = ops.ArgMaxWithValue(axis=-1)(dir_preds)[0]
+                dir_labels = torch.max(dir_preds, dim=-1)[1]  # indices
         total_scores = _get_total_scores(cls_preds, cfg)
         # Apply NMS
         selected_data = _get_selected_data(total_scores, box_preds, dir_labels, cfg)
@@ -169,9 +168,9 @@ def predict(example, preds_dict, cfg, box_coder):
         if selected_boxes is not None:
             if use_direction_classifier:
                 opp_labels = xor((selected_boxes[..., -1] > 0), selected_dir_labels)
-                selected_boxes[..., -1] += mnp.where(opp_labels,
-                                                     Tensor(mnp.pi, dtype=selected_boxes.dtype),
-                                                     Tensor(0.0, dtype=selected_boxes.dtype))
+                selected_boxes[..., -1] += torch.where(opp_labels,
+                                                       torch.tensor(np.pi, dtype=selected_boxes.dtype, device=selected_boxes.device),
+                                                       torch.tensor(0.0, dtype=selected_boxes.dtype, device=selected_boxes.device))
             final_box_preds_camera = box_ops.box_lidar_to_camera(selected_boxes, rect, trv2c)
             locs = final_box_preds_camera[:, :3]
             dims = final_box_preds_camera[:, 3:6]
@@ -180,9 +179,9 @@ def predict(example, preds_dict, cfg, box_coder):
             box_corners = box_ops.center_to_corner_box3d(locs, dims, angles, camera_box_origin, axis=1)
             box_corners_in_image = box_ops.project_to_image(box_corners, p2)
             # box_corners_in_image: [N, 8, 2]
-            minxy = ops.ArgMinWithValue(axis=1)(box_corners_in_image)[1]
-            maxxy = ops.ArgMaxWithValue(axis=1)(box_corners_in_image)[1]
-            box_2d_preds = ops.Concat(axis=1)([minxy, maxxy])
+            minxy = torch.min(box_corners_in_image, dim=1)[0]  # values
+            maxxy = torch.max(box_corners_in_image, dim=1)[0]  # values
+            box_2d_preds = torch.cat([minxy, maxxy], dim=1)
             # predictions
             predictions_dict = {
                 "bbox": box_2d_preds,
@@ -211,14 +210,18 @@ def predict_kitti_to_anno(predictions_dicts,
                           center_limit_range=None,
                           lidar_input=False):
     """predict kitti to anno"""
-    batch_image_shape = example['image_shape'].asnumpy()
+    batch_image_shape = example['image_shape'].cpu().numpy()
     annos = []
     for i, preds_dict in enumerate(predictions_dicts):
         for k, v in preds_dict.items():
             if v is not None:
-                preds_dict[k] = v.asnumpy()
+                if isinstance(v, torch.Tensor):
+                    preds_dict[k] = v.cpu().numpy()
         image_shape = batch_image_shape[i]
         img_idx = preds_dict["image_idx"]
+        if isinstance(img_idx, torch.Tensor):
+            img_idx = img_idx.cpu().numpy()
+            
         if preds_dict["bbox"] is not None:
             box_2d_preds = preds_dict["bbox"]
             box_preds = preds_dict["box3d_camera"]

@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-# http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0 
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,31 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-"""losses"""
+"""losses (PyTorch Version)"""
 import numpy as np
-from mindspore import Tensor
-from mindspore import dtype as mstype
-from mindspore import nn
-from mindspore import ops
-from mindspore.ops import constexpr
-
-
-@constexpr
-def _create_off_value():
-    """create off value"""
-    return Tensor(0.0, mstype.float32)
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 
 def indices_to_dense_vector(indices,
                             size,
                             indices_value=1.,
-                            default_value=0):
+                            default_value=0,
+                            dtype=torch.float32,
+                            device=None):
     """Creates dense vector with indices set to specific value and rest to zeros.
-
-    This function exists because it is unclear if it is safe to use
-      tf.sparse_to_dense(indices, [size], 1, validate_indices=False)
-    with indices which are not ordered.
-    This function accepts a dynamic size (e.g. tf.shape(tensor)[0])
 
     Args:
       indices: 1d Tensor with integer indices which are to be set to
@@ -44,36 +33,36 @@ def indices_to_dense_vector(indices,
       size: scalar with size (integer) of output Tensor.
       indices_value: values of elements specified by indices in the output vector
       default_value: values of other elements in the output vector.
+      dtype: data type of the output tensor.
+      device: device of the output tensor.
 
     Returns:
       dense 1D Tensor of shape [size] with indices set to indices_values and the
       rest set to default_value.
     """
-    dense = ops.Zeros()(size).fill(default_value)
-    dense[indices] = indices_value
-
+    dense = torch.full((size,), default_value, dtype=dtype, device=device)
+    if indices.numel() > 0:
+        dense.scatter_(0, indices.long(), indices_value)
     return dense
 
 
 def _sigmoid_cross_entropy_with_logits(logits, labels):
     """sigmoid cross entropy with logits"""
-    loss = ops.clip_by_value(
-        logits,
-        clip_value_min=_create_off_value(),
-        clip_value_max=logits.max()
-    ) - logits * labels.astype(logits.dtype)
-    loss += ops.Log1p()(ops.Exp()(-ops.Abs()(logits)))
+    # Numerically stable implementation: max(x, 0) - x*z + log(1 + exp(-abs(x)))
+    loss = torch.clamp(logits, min=0) - logits * labels.to(logits.dtype)
+    loss += torch.log1p(torch.exp(-torch.abs(logits)))
     return loss
 
 
 def _softmax_cross_entropy_with_logits(logits, labels):
     """softmax cross entropy with logits"""
-    loss_ftor = nn.SoftmaxCrossEntropyWithLogits(sparse=True)
-    loss = loss_ftor(logits, ops.ArgMaxWithValue(axis=-1)(labels)[0].astype(mstype.int32))
+    # labels are one-hot encoded, convert to class indices for F.cross_entropy
+    target_indices = torch.argmax(labels, dim=-1)
+    loss = F.cross_entropy(logits, target_indices, reduction='none')
     return loss
 
 
-class SigmoidFocalClassificationLoss(nn.Cell):
+class SigmoidFocalClassificationLoss(nn.Module):
     """Sigmoid focal cross entropy loss.
 
     Focal loss down-weights well classified examples and focuses on the hard
@@ -85,27 +74,37 @@ class SigmoidFocalClassificationLoss(nn.Cell):
         self._alpha = alpha
         self._gamma = gamma
 
-    def construct(self,
-                  prediction_tensor,
-                  target_tensor,
-                  weights,
-                  class_indices=None):
+    def forward(self,
+                prediction_tensor,
+                target_tensor,
+                weights,
+                class_indices=None):
         """Compute loss function."""
-        weights = ops.ExpandDims()(weights, 2)
+        weights = weights.unsqueeze(2)
         if class_indices is not None:
-            weights *= indices_to_dense_vector(
+            class_weights = indices_to_dense_vector(
                 class_indices,
-                prediction_tensor.shape[2]
-            ).view(1, 1, -1).astype(prediction_tensor.dtype)
-        per_entry_cross_ent = (
-            _sigmoid_cross_entropy_with_logits(labels=target_tensor, logits=prediction_tensor)
+                prediction_tensor.shape[2],
+                indices_value=1.,
+                default_value=0,
+                dtype=prediction_tensor.dtype,
+                device=prediction_tensor.device
+            ).view(1, 1, -1)
+            weights = weights * class_weights
+        
+        per_entry_cross_ent = _sigmoid_cross_entropy_with_logits(
+            logits=prediction_tensor, 
+            labels=target_tensor
         )
-        prediction_probabilities = ops.Sigmoid()(prediction_tensor)
+        
+        prediction_probabilities = torch.sigmoid(prediction_tensor)
         p_t = ((target_tensor * prediction_probabilities) +
                ((1 - target_tensor) * (1 - prediction_probabilities)))
+        
         modulating_factor = 1.0
         if self._gamma:
-            modulating_factor = ops.Pow()(1.0 - p_t, self._gamma)
+            modulating_factor = torch.pow(1.0 - p_t, self._gamma)
+        
         alpha_weight_factor = 1.0
         if self._alpha is not None:
             alpha_weight_factor = (target_tensor * self._alpha +
@@ -115,7 +114,7 @@ class SigmoidFocalClassificationLoss(nn.Cell):
         return focal_cross_entropy_loss * weights
 
 
-class WeightedSmoothL1LocalizationLoss(nn.Cell):
+class WeightedSmoothL1LocalizationLoss(nn.Module):
     """Smooth L1 localization loss function.
 
     The smooth L1_loss is defined elementwise as .5 x^2 if |x|<1 and |x|-.5
@@ -128,13 +127,12 @@ class WeightedSmoothL1LocalizationLoss(nn.Cell):
         super().__init__()
         self._sigma = sigma
         if code_weights is not None:
-            self._code_weights = np.array(code_weights, dtype=np.float32)
-            self._code_weights = Tensor(self._code_weights)
+            self._code_weights = torch.tensor(code_weights, dtype=torch.float32)
         else:
             self._code_weights = None
         self._codewise = codewise
 
-    def construct(self, prediction_tensor, target_tensor, weights=None):
+    def forward(self, prediction_tensor, target_tensor, weights=None):
         """Compute loss function.
 
         Args:
@@ -145,29 +143,35 @@ class WeightedSmoothL1LocalizationLoss(nn.Cell):
             weights: a float tensor of shape [batch_size, num_anchors]
 
         Returns:
-            loss: a float tensor of shape [batch_size, num_anchors] tensor
-                representing the value of the loss function.
+            loss: a float tensor of shape [batch_size, num_anchors, code_size] or
+                [batch_size, num_anchors] depending on codewise parameter.
         """
         diff = prediction_tensor - target_tensor
+        
         if self._code_weights is not None:
-            code_weights = self._code_weights.astype(prediction_tensor.dtype)
+            code_weights = self._code_weights.to(prediction_tensor.dtype).to(prediction_tensor.device)
             diff = code_weights.view(1, 1, -1) * diff
-        abs_diff = ops.Abs()(diff)
-        abs_diff_lt_1 = ops.LessEqual()(abs_diff, 1 / (self._sigma ** 2)).astype(abs_diff.dtype)
-        loss = (abs_diff_lt_1 * 0.5 * ops.Pow()(abs_diff * self._sigma, 2)
-                + (abs_diff - 1 / (2 * (self._sigma ** 2))) * (1. - abs_diff_lt_1))
+            
+        abs_diff = torch.abs(diff)
+        sigma2 = self._sigma ** 2
+        abs_diff_lt_1 = (abs_diff <= 1 / sigma2).to(abs_diff.dtype)
+        
+        loss = (abs_diff_lt_1 * 0.5 * torch.pow(abs_diff * self._sigma, 2) +
+                (abs_diff - 1 / (2 * sigma2)) * (1. - abs_diff_lt_1))
+        
         if self._codewise:
             anchorwise_smooth_l1norm = loss
             if weights is not None:
-                anchorwise_smooth_l1norm *= ops.ExpandDims()(weights, -1)
+                anchorwise_smooth_l1norm = anchorwise_smooth_l1norm * weights.unsqueeze(-1)
         else:
-            anchorwise_smooth_l1norm = ops.ReduceSum()(loss, 2)
+            anchorwise_smooth_l1norm = loss.sum(dim=2)
             if weights is not None:
-                anchorwise_smooth_l1norm *= weights
+                anchorwise_smooth_l1norm = anchorwise_smooth_l1norm * weights
+                
         return anchorwise_smooth_l1norm
 
 
-class WeightedSoftmaxClassificationLoss(nn.Cell):
+class WeightedSoftmaxClassificationLoss(nn.Module):
     """Softmax loss function."""
 
     def __init__(self, logit_scale=1.0):
@@ -181,7 +185,7 @@ class WeightedSoftmaxClassificationLoss(nn.Cell):
         super().__init__()
         self._logit_scale = logit_scale
 
-    def construct(self, prediction_tensor, target_tensor, weights):
+    def forward(self, prediction_tensor, target_tensor, weights):
         """Compute loss function.
 
         Args:
@@ -196,9 +200,15 @@ class WeightedSoftmaxClassificationLoss(nn.Cell):
             representing the value of the loss function.
         """
         num_classes = prediction_tensor.shape[-1]
-        prediction_tensor = ops.Div()(prediction_tensor, self._logit_scale)
+        prediction_tensor = prediction_tensor / self._logit_scale
+        
+        # Reshape for cross_entropy: [batch*anchors, classes]
+        logits_flat = prediction_tensor.view(-1, num_classes)
+        labels_flat = target_tensor.view(-1, num_classes)
+        
         per_row_cross_ent = _softmax_cross_entropy_with_logits(
-            labels=target_tensor.view(-1, num_classes),
-            logits=prediction_tensor.view(-1, num_classes)
+            labels=labels_flat,
+            logits=logits_flat
         )
+        
         return per_row_cross_ent.view(weights.shape) * weights

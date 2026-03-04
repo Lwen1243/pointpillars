@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-# http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0 
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,9 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-"""box coders"""
-from mindspore import numpy as mnp
-from mindspore import ops
+"""box coders (PyTorch Version)"""
+import torch
 
 from src.core import box_np_ops
 from src.core import box_ops
@@ -60,9 +59,9 @@ class BevBoxCoder:
         """decode"""
         anchors = anchors[..., [0, 1, 3, 4, 6]]
         ret = box_ops.bev_box_decode(inp, anchors, self.vec_encode, self.linear_dim)
-        z_fixed = mnp.full([*ret.shape[:-1], 1], self.z_fixed, dtype=ret.dtype)
-        h_fixed = mnp.full([*ret.shape[:-1], 1], self.h_fixed, dtype=ret.dtype)
-        return ops.Concat(axis=-1)([ret[..., :2], z_fixed, ret[..., 2:4], h_fixed, ret[..., 4:]])
+        z_fixed = torch.full([*ret.shape[:-1], 1], self.z_fixed, dtype=ret.dtype, device=ret.device)
+        h_fixed = torch.full([*ret.shape[:-1], 1], self.h_fixed, dtype=ret.dtype, device=ret.device)
+        return torch.cat([ret[..., :2], z_fixed, ret[..., 2:4], h_fixed, ret[..., 4:]], dim=-1)
 
     @property
     def code_size(self):
