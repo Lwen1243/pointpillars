@@ -17,7 +17,6 @@ import numpy as np
 import numba
 
 
-@numba.jit(nopython=False)
 def surface_equ_3d_jit(polygon_surfaces):
     """surface equ 3d jit"""
     # return [a, b, c], d in ax+by+cz+d=0
@@ -25,11 +24,10 @@ def surface_equ_3d_jit(polygon_surfaces):
     surface_vec = polygon_surfaces[:, :, :2, :] - polygon_surfaces[:, :, 1:3, :]
     # normal_vec: [..., 3]
     normal_vec = np.cross(surface_vec[:, :, 0, :], surface_vec[:, :, 1, :])
-    d = (normal_vec * polygon_surfaces[:, :, 0, :]).sum(axis=-1)
+    d = np.einsum('aij, aij->ai', normal_vec, polygon_surfaces[:, :, 0, :])
     return normal_vec, -d
 
 
-@numba.jit(nopython=False)
 def points_in_convex_polygon_3d_jit(points,
                                     polygon_surfaces,
                                     num_surfaces=None):
@@ -68,7 +66,6 @@ def points_in_convex_polygon_3d_jit(points,
     return ret
 
 
-@numba.jit
 def points_in_convex_polygon_jit(points, polygon, clockwise=True):
     """check points is in 2d convex polygons. True when point in polygon
     Args:
