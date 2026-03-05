@@ -38,5 +38,8 @@ Up to 15 cars and 30 pedestrians are visible per image. The 3D object detection 
 
 # Why to do this
 
-Pointpillars is hard to convert to rknn and other platform, so I try to rebuild it
+Pointpillars is hard to convert to rk3588 and other platform, so I try to rebuild it
 
+# How to use it
+
+please refer to https://github.com/LKLQQ/pointpillars to get more information
