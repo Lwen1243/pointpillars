@@ -27,3 +27,4 @@ PointPillarsNet created
 2026-03-06 12:28:00 epoch:0, iter:1250, loss:1.9553, fps:0.58 imgs/sec
 2026-03-06 12:30:52 epoch:0, iter:1300, loss:2.0142, fps:0.58 imgs/sec
 2026-03-06 12:33:40 epoch:0, iter:1350, loss:2.0426, fps:0.59 imgs/sec
+2026-03-06 12:36:27 epoch:0, iter:1400, loss:1.9927, fps:0.6 imgs/sec
