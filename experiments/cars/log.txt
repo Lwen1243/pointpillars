@@ -28,3 +28,20 @@ PointPillarsNet created
 2026-03-06 12:30:52 epoch:0, iter:1300, loss:2.0142, fps:0.58 imgs/sec
 2026-03-06 12:33:40 epoch:0, iter:1350, loss:2.0426, fps:0.59 imgs/sec
 2026-03-06 12:36:27 epoch:0, iter:1400, loss:1.9927, fps:0.6 imgs/sec
+2026-03-06 12:39:16 epoch:0, iter:1450, loss:2.0758, fps:0.59 imgs/sec
+2026-03-06 12:41:59 epoch:0, iter:1500, loss:1.9811, fps:0.61 imgs/sec
+2026-03-06 12:44:34 epoch:0, iter:1550, loss:2.1554, fps:0.64 imgs/sec
+2026-03-06 12:47:07 epoch:0, iter:1600, loss:2.0609, fps:0.66 imgs/sec
+2026-03-06 12:49:47 epoch:0, iter:1650, loss:1.7058, fps:0.63 imgs/sec
+2026-03-06 12:52:21 epoch:0, iter:1700, loss:2.2463, fps:0.65 imgs/sec
+2026-03-06 12:55:03 epoch:0, iter:1750, loss:1.8309, fps:0.62 imgs/sec
+2026-03-06 12:57:36 epoch:0, iter:1800, loss:2.0073, fps:0.65 imgs/sec
+2026-03-06 13:00:08 epoch:0, iter:1850, loss:1.8587, fps:0.66 imgs/sec
+Traceback (most recent call last):
+  File "/home/mingding/project/pointpillars/train.py", line 281, in <module>
+    run_train(parse_args)
+  File "/home/mingding/project/pointpillars/train.py", line 206, in run_train
+    state_dict = pointpillarsnet_wloss.module.model.state_dict() if isinstance(pointpillarsnet_wloss, DDP) else pointpillarsnet_wloss.model.state_dict()
+  File "/home/mingding/project/pointpillars/pillars/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1965, in __getattr__
+    raise AttributeError(
+AttributeError: 'PointPillarsWithLossCell' object has no attribute 'model'

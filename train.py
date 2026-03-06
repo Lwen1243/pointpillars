@@ -203,7 +203,7 @@ def run_train(args):
                     )
                     
                     # 保存模型状态
-                    state_dict = pointpillarsnet_wloss.module.model.state_dict() if isinstance(pointpillarsnet_wloss, DDP) else pointpillarsnet_wloss.model.state_dict()
+                    state_dict = pointpillarsnet_wloss.module.network.state_dict() if isinstance(pointpillarsnet_wloss, DDP) else pointpillarsnet_wloss.network.state_dict()
                     
                     torch.save({
                         'epoch': epoch + 1,
