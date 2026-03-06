@@ -495,7 +495,7 @@ def create_anchors_3d_stride(feature_size,
     x_centers = x_centers * x_stride + x_offset
     sizes = np.reshape(np.array(sizes, dtype=dtype), [-1, 3])
     rotations = np.array(rotations, dtype=dtype)
-    rets = np.meshgrid(x_centers, y_centers, z_centers, rotations, indexing='ij')
+    rets = list(np.meshgrid(x_centers, y_centers, z_centers, rotations, indexing='ij'))
     tile_shape = [1] * 5
     tile_shape[-2] = int(sizes.shape[0])
     for i in range(len(rets)):
@@ -535,8 +535,8 @@ def create_anchors_3d_range(feature_size,
         anchor_range[0], anchor_range[3], feature_size[2], dtype=dtype)
     sizes = np.reshape(np.array(sizes, dtype=dtype), [-1, 3])
     rotations = np.array(rotations, dtype=dtype)
-    rets = np.meshgrid(
-        x_centers, y_centers, z_centers, rotations, indexing='ij')
+    rets = list(np.meshgrid(
+        x_centers, y_centers, z_centers, rotations, indexing='ij'))
     tile_shape = [1] * 5
     tile_shape[-2] = int(sizes.shape[0])
     for i in range(len(rets)):

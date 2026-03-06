@@ -60,4 +60,4 @@ class KittiDataset:
             num_point_features=self._num_point_features,
             prep_func=self._prep_func)
         data = [example[key] for key in self.data_keys]
-        return tuple(data)
+        return {key: example[key] for key in self.data_keys}

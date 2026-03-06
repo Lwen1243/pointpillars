@@ -19,6 +19,7 @@ import os
 import warnings
 from pathlib import Path
 from time import time
+import numpy as np
 
 import torch
 import torch.distributed as dist
@@ -236,19 +237,33 @@ def run_train(args):
 
 def custom_collate_fn(batch):
     """
-    自定义数据整理函数，需要根据数据集结构调整
-    假设 batch 是一个字典列表
+    batch: list of dicts, 每个 dict 是 __getitem__ 返回的
     """
-    if not batch:
-        return {}
-    
     keys = batch[0].keys()
     collated = {}
     
     for key in keys:
         values = [item[key] for item in batch]
-        if isinstance(values[0], torch.Tensor):
-            collated[key] = torch.stack(values, dim=0)
+        
+        # 如果值是 numpy array，先转为 tensor 再 stack
+        if isinstance(values[0], np.ndarray):
+            # 注意：如果 arrays 长度不同（变长数据），不能用 stack，需要用 list
+            try:
+                values = np.stack(values, axis=0)
+                collated[key] = torch.from_numpy(values)
+            except ValueError:
+                # 变长数据（如不同数量的 voxels），保持为 list
+                collated[key] = [torch.from_numpy(v) if isinstance(v, np.ndarray) else v for v in values]
+        
+        # 如果值已经是 tensor
+        elif isinstance(values[0], torch.Tensor):
+            try:
+                collated[key] = torch.stack(values, dim=0)
+            except RuntimeError:
+                # 变长 tensor，保持为 list
+                collated[key] = values
+        
+        # 其他类型（如 int, float）
         else:
             collated[key] = values
             

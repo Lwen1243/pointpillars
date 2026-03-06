@@ -1,0 +1,2 @@
+PointPillarsNet created
+2026-03-06 11:18:24 epoch:0, iter:0, loss:21.4267, fps:0.29 imgs/sec

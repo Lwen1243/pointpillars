@@ -26,7 +26,7 @@ train_input_reader:
   groundtruth_points_drop_percentage: 0.0
   groundtruth_drop_max_keep_points: 15
   database_sampler:
-    database_info_path: "/path/to/kitti/kitti_dbinfos_train.pkl"
+    database_info_path: "/home/mingding/project/pointpillars/KITTI/kitti_dbinfos_train.pkl"
     sample_groups:
       name_to_max_num:
         key: "Cyclist"
@@ -43,8 +43,8 @@ train_input_reader:
 
   remove_unknown_examples: false
   remove_environment: false
-  kitti_info_path: "/path/to/kitti/kitti_infos_train.pkl"
-  kitti_root_path: "/path/to/kitti/"
+  kitti_info_path: "/home/mingding/project/pointpillars/KITTI/kitti_infos_train.pkl"
+  kitti_root_path: "/home/mingding/project/pointpillars/KITTI/"
 
 
 eval_input_reader:
@@ -56,8 +56,8 @@ eval_input_reader:
   anchor_area_threshold: 1
   remove_environment: false
 
-  kitti_info_path: "/path/to/kitti/kitti_infos_val.pkl"
-  kitti_root_path: "/path/to/kitti/"
+  kitti_info_path: "/home/mingding/project/pointpillars/KITTI/kitti_infos_val.pkl"
+  kitti_root_path: "/home/mingding/project/pointpillars/KITTI/"
 
 
 model:

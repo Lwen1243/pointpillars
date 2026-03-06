@@ -16,7 +16,6 @@
 import abc
 from collections import OrderedDict
 
-import numba
 import numpy as np
 
 from src.core import box_np_ops
@@ -183,7 +182,6 @@ def mask_points_in_corners(points, box_corners):
     return mask
 
 
-@numba.njit
 def _rotation_matrix_3d_(rot_mat_t, angle, axis):
     """rotation matrix 3d"""
     rot_sin = np.sin(angle)
@@ -206,7 +204,6 @@ def _rotation_matrix_3d_(rot_mat_t, angle, axis):
         rot_mat_t[2, 2] = rot_cos
 
 
-@numba.njit
 def _rotation_box2d_jit_(corners, angle, rot_mat_t):
     """rotations box 2d jit"""
     rot_sin = np.sin(angle)
@@ -218,7 +215,6 @@ def _rotation_box2d_jit_(corners, angle, rot_mat_t):
     corners[:] = corners @ rot_mat_t
 
 
-@numba.njit
 def noise_per_box(boxes, valid_mask, loc_noises, rot_noises):
     """noise per box"""
     # boxes: [N, 5]
@@ -249,7 +245,6 @@ def noise_per_box(boxes, valid_mask, loc_noises, rot_noises):
     return success_mask
 
 
-@numba.njit
 def noise_per_box_group(boxes, valid_mask, loc_noises, rot_noises, group_nums):
     """noise per box group"""
     # WARNING: this function need boxes to be sorted by group id.
@@ -288,7 +283,6 @@ def noise_per_box_group(boxes, valid_mask, loc_noises, rot_noises, group_nums):
     return success_mask
 
 
-@numba.njit
 def noise_per_box_group_v2_(boxes, valid_mask, loc_noises, rot_noises,
                             group_nums, global_rot_noises):
     """noise per box group v2"""
@@ -361,7 +355,6 @@ def noise_per_box_group_v2_(boxes, valid_mask, loc_noises, rot_noises,
     return success_mask
 
 
-@numba.njit
 def noise_per_box_v2_(boxes, valid_mask, loc_noises,
                       rot_noises, global_rot_noises):
     """noise per box v2"""
@@ -417,7 +410,6 @@ def noise_per_box_v2_(boxes, valid_mask, loc_noises,
     return success_mask
 
 
-@numba.njit
 def points_transform_(points, centers, point_masks, loc_transform,
                       rot_transform, valid_mask):
     """points transform"""
@@ -437,7 +429,6 @@ def points_transform_(points, centers, point_masks, loc_transform,
                     break  # only apply first box's transform
 
 
-@numba.njit
 def box3d_transform_(boxes, loc_transform, rot_transform, valid_mask):
     """box 3d transform"""
     num_box = boxes.shape[0]
@@ -457,7 +448,6 @@ def _select_transform(transform, indices):
     return result
 
 
-@numba.njit
 def group_transform_(loc_noise, rot_noise, locs,
                      group_center, valid_mask):
     """group transform"""
@@ -479,7 +469,6 @@ def group_transform_(loc_noise, rot_noise, locs,
                     np.cos(rot_center + rot_noise[i, j]) - np.cos(rot_center))
 
 
-@numba.njit
 def group_transform_v2_(loc_noise, rot_noise, locs,
                         group_center, grot_noise, valid_mask):
     """group transform v2"""
@@ -671,7 +660,6 @@ def global_scaling(gt_boxes, points, min_scale=0.95, max_scale=1.05):
     return gt_boxes, points
 
 
-@numba.jit(nopython=True)
 def box_collision_test(boxes, qboxes, clockwise=True):
     """box collision test"""
     n_boxes = boxes.shape[0]
@@ -706,7 +694,6 @@ def box_collision_test(boxes, qboxes, clockwise=True):
     return ret
 
 
-@numba.jit(nopython=True)
 def _get_ret(lines_boxes, lines_qboxes, i, j):
     """get ret"""
     for k in range(4):
@@ -726,7 +713,6 @@ def _get_ret(lines_boxes, lines_qboxes, i, j):
     return False
 
 
-@numba.jit(nopython=True)
 def _get_box_overlap_another(boxes, qboxes, clockwise, i, j):
     """get box overlap another box"""
     box_overlap_another = True

@@ -40,6 +40,8 @@ class SigmoidFocalClassificationLoss(nn.Module):
         loss = alpha_t * (1. - p_t) ** self.gamma * ce_loss
         
         if weights is not None:
+            if weights.dim() == 2 and loss.dim() == 3:
+                weights = weights.unsqueeze(-1)
             loss = loss * weights
         return loss
 
@@ -327,14 +329,14 @@ class PointPillarsScatter(nn.Module):
         # Scatter to canvas
         # coords indices: batch, y, x (ignore z)
         batch_idx = coords[:, :, 0].long()
-        y_idx = coords[:, :, 1].long()
-        x_idx = coords[:, :, 2].long()
+        y_idx = coords[:, :, 2].long()  # 注意：通常 coords 是 [b, z, y, x]，所以 y 是索引2，x 是索引3
+        x_idx = coords[:, :, 3].long()  # 如果 coords 确实是 [b, z, y, x]
         
-        # Transpose features to [batch, channels, num_voxels]
-        voxel_features_t = voxel_features.permute(0, 2, 1)
+        # 删除这行：voxel_features_t = voxel_features.permute(0, 2, 1)
+        # 直接使用 voxel_features，其形状应该是 [batch, num_voxels, channels]
         
         # Advanced indexing
-        canvas[batch_idx, :, y_idx, x_idx] = voxel_features_t
+        canvas[batch_idx, :, y_idx, x_idx] = voxel_features
         
         return canvas
 
